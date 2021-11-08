@@ -27,6 +27,34 @@ from megatron import mpu, get_args
 from megatron import get_args
 from megatron import print_rank_0
 
+from logging.config import dictConfig
+import logging
+import time
+
+dictConfig({
+    'version': 1,
+    'formatters': {
+        'default': {
+            'format': '[%(asctime)s] %(message)s',
+        }
+    },
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': 'debug.log',
+            'formatter': 'default',
+        },
+    },
+    'root': {
+        'level': 'DEBUG',
+        'handlers': ['file']
+    }
+})
+
+
+
+
 _CHECKPOINT_VERSION = None
 
 def set_checkpoint_version(value):
@@ -91,6 +119,7 @@ def get_checkpoint_tracker_filename(checkpoints_path):
 
 def save_ds_checkpoint(iteration, model, args):
     """Save a model checkpoint."""
+    start_time = time.time()
 
     sd = {}
     sd['iteration'] = iteration
@@ -114,6 +143,8 @@ def save_ds_checkpoint(iteration, model, args):
         model.save_checkpoint(args.save, client_state=sd)
     finally:
         model.module.state_dict = original_state_dict
+
+    logging.debug("checkpointing time(s): %f", time.time() - start_time)
 
 
 def save_checkpoint(iteration, model, optimizer, lr_scheduler):
