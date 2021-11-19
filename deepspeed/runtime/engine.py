@@ -78,6 +78,34 @@ except ImportError:
     pass
 
 
+
+def get_obj_size(obj):
+    import sys
+    import gc
+
+    marked = {id(obj)}
+    obj_q = [obj]
+    sz = 0
+        
+    while obj_q:
+        sz += sum(map(sys.getsizeof, obj_q))
+
+        # Lookup all the object referred to by the object in obj_q.
+        #See: https://docs.python.org/3.7/library/gc.html#gc.get_referents    
+        all_refr = ((id(o), o) for o in gc.get_referents(*obj_q))
+
+        # Filter object that are already marked.
+        # Using dict notation will prevent repeated objects.
+        new_refr = {o_id: o for o_id, o in all_refr if o_id not in marked and not isinstance(o, type)}
+
+        # The new obj_q will be the ones that were not marked,
+        # and we will update marked with their ids so we will
+        # not traverse them again.
+        obj_q = new_refr.values()
+        marked.update(new_refr.keys())
+
+    return sz
+
 def split_half_float_double_sparse(tensors):
     supported_types = [
         "torch.cuda.HalfTensor",
@@ -2289,7 +2317,7 @@ class DeepSpeedEngine(Module):
 
         # Ensure checkpoint tag is consistent across ranks
         self._checkpoint_tag_validation(tag)
-
+        
         if self.has_moe_layers:
             self.save_non_zero_checkpoint = False
             self._create_checkpoint_file(save_dir, tag, False)
@@ -2552,8 +2580,33 @@ class DeepSpeedEngine(Module):
         os.chmod(dst, os.stat(dst).st_mode | stat.S_IEXEC)
 
     def _save_zero_checkpoint(self, save_path, tag):
+        import copy
+        # save zero_pp_rank_*_mp_rank_**_optim_states.pt
         zero_checkpoint_name = self._get_zero_ckpt_name(save_path, tag)
-        zero_sd = dict(optimizer_state_dict=self.optimizer.state_dict(),
+        
+        # TODO: Copy tensor from gpu to cpu
+        base_optimizer_state = self.optimizer.state_dict()['base_optimizer_state']
+        cpu_base_optimizer_state = []
+        for opt_state_dict in base_optimizer_state: # list
+            cpu_opt_state_dict = {}
+            for key in opt_state_dict:
+                if torch.is_tensor(opt_state_dict[key]):
+                    cpu_opt_state_dict[key] = opt_state_dict[key].to('cpu')
+                else:
+                    cpu_opt_state_dict[key] = opt_state_dict[key]
+            cpu_base_optimizer_state.append(cpu_opt_state_dict)
+    
+        
+        optimizer_state_dict ={}
+        for key in self.optimizer.state_dict():
+            if key == 'base_optimizer_state':
+                continue
+            optimizer_state_dict[key] = self.optimizer.state_dict()[key]
+        optimizer_state_dict['base_optimizer_state'] = cpu_base_optimizer_state
+        
+              
+        #zero_sd = dict(optimizer_state_dict=self.optimizer.state_dict(),
+        zero_sd = dict(optimizer_state_dict=optimizer_state_dict,
                        param_shapes=self._get_zero_param_shapes(),
                        ds_config=self.config,
                        ds_version=version)

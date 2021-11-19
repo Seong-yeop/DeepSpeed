@@ -28,7 +28,7 @@ from deepspeed.runtime.utils import copy_to_device, move_to_device, see_memory_u
 from deepspeed.utils.timer import SynchronizedWallClockTimer as Timers
 
 # DeepSpeed Checkpointing Enabled or Disabled
-deepspeed_checkpointing_enabled = False
+deepspeed_checkpointing_enabled = True
 
 # MP parameters
 mpu = None
@@ -53,7 +53,7 @@ PARTITION_ACTIVATIONS = False
 CPU_CHECKPOINT = False
 CONTIGUOUS_CHECKPOINTING = False
 SYNCHRONIZE = False
-PROFILE_TIME = False
+PROFILE_TIME = True
 
 # Default name for the model parallel rng tracker.
 _MODEL_PARALLEL_RNG_TRACKER_NAME = 'model-parallel-rng'
