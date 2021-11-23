@@ -106,6 +106,13 @@ def get_obj_size(obj):
 
     return sz
 
+import asyncio
+def fire_and_forget(f):
+    def wrapped(*args, **kwargs):
+        return asyncio.get_event_loop().run_in_executor(None, f, *args, *kwargs)
+    return wrapped
+
+
 def split_half_float_double_sparse(tensors):
     supported_types = [
         "torch.cuda.HalfTensor",
@@ -2579,10 +2586,12 @@ class DeepSpeedEngine(Module):
         # make executable
         os.chmod(dst, os.stat(dst).st_mode | stat.S_IEXEC)
 
+    @fire_and_forget
     def _save_zero_checkpoint(self, save_path, tag):
         import copy
         # save zero_pp_rank_*_mp_rank_**_optim_states.pt
         zero_checkpoint_name = self._get_zero_ckpt_name(save_path, tag)
+        
         
         # TODO: Copy tensor from gpu to cpu
         base_optimizer_state = self.optimizer.state_dict()['base_optimizer_state']
@@ -2604,7 +2613,7 @@ class DeepSpeedEngine(Module):
             optimizer_state_dict[key] = self.optimizer.state_dict()[key]
         optimizer_state_dict['base_optimizer_state'] = cpu_base_optimizer_state
         
-              
+          
         #zero_sd = dict(optimizer_state_dict=self.optimizer.state_dict(),
         zero_sd = dict(optimizer_state_dict=optimizer_state_dict,
                        param_shapes=self._get_zero_param_shapes(),
