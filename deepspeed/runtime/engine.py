@@ -2591,27 +2591,35 @@ class DeepSpeedEngine(Module):
         import copy
         # save zero_pp_rank_*_mp_rank_**_optim_states.pt
         zero_checkpoint_name = self._get_zero_ckpt_name(save_path, tag)
+            
+
+        if self.zero_optimization_stage() != 3:
+            import pdb; pdb.set_trace()
+            
         
-        
+        state_key = 'optimizer_state_dict'
+
         # TODO: Copy tensor from gpu to cpu
-        base_optimizer_state = self.optimizer.state_dict()['base_optimizer_state']
-        cpu_base_optimizer_state = []
-        for opt_state_dict in base_optimizer_state: # list
-            cpu_opt_state_dict = {}
-            for key in opt_state_dict:
-                if torch.is_tensor(opt_state_dict[key]):
-                    cpu_opt_state_dict[key] = opt_state_dict[key].to('cpu')
+        optimizer_state_dict_state_dict = self.optimizer.state_dict()[state_key]['state']
+        cpu_optimizer_state_dict_state_dict = {}
+        for i_key in optimizer_state_dict_state_dict: 
+            cpu_state = {}
+            for j_key in optimizer_state_dict_state_dict[i_key]:
+                if torch.is_tensor(optimizer_state_dict_state_dict[i_key][j_key]):
+                    cpu_state[j_key] = optimizer_state_dict_state_dict[i_key][j_key].to('cpu')
                 else:
-                    cpu_opt_state_dict[key] = opt_state_dict[key]
-            cpu_base_optimizer_state.append(cpu_opt_state_dict)
+                    cpu_state[j_key] = optimizer_state_dict_state_dict[i_key][j_key]
+            cpu_optimizer_state_dict_state_dict[i_key] = cpu_state
     
         
         optimizer_state_dict ={}
         for key in self.optimizer.state_dict():
-            if key == 'base_optimizer_state':
+            if key == state_key:
                 continue
             optimizer_state_dict[key] = self.optimizer.state_dict()[key]
-        optimizer_state_dict['base_optimizer_state'] = cpu_base_optimizer_state
+        optimizer_state_dict[state_key] = {}
+        optimizer_state_dict[state_key]['state'] = cpu_optimizer_state_dict_state_dict
+        optimizer_state_dict[state_key]['param_groups'] = self.optimizer.state_dict()[state_key]['param_groups']
         
           
         #zero_sd = dict(optimizer_state_dict=self.optimizer.state_dict(),
